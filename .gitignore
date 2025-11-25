@@ -39,6 +39,10 @@ playwright/.cache/
 *.log
 logs/
 
+# Debug output
+debug_*.png
+debug_*.html
+
 # OS
 .DS_Store
 Thumbs.db

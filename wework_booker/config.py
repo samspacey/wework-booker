@@ -15,11 +15,12 @@ class Config:
     booking_days: list[str]
     headless: bool
     weeks_ahead: int
+    debug: bool = False
 
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables."""
-        load_dotenv()
+        load_dotenv(override=True)
 
         email = os.getenv("WEWORK_EMAIL")
         password = os.getenv("WEWORK_PASSWORD")

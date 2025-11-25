@@ -1,5 +1,7 @@
 """Scheduling for automated desk bookings."""
 
+from __future__ import annotations
+
 import logging
 import schedule
 import time

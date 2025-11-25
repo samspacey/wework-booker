@@ -22,20 +22,25 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.option("--debug", is_flag=True, help="Enable debug logging")
-def cli(debug: bool) -> None:
+@click.option("--debug", is_flag=True, help="Enable debug logging and save screenshots")
+@click.pass_context
+def cli(ctx: click.Context, debug: bool) -> None:
     """WeWork Desk Booking Automation Tool."""
+    ctx.ensure_object(dict)
+    ctx.obj["debug"] = debug
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
 
 @cli.command()
-def book() -> None:
+@click.pass_context
+def book(ctx: click.Context) -> None:
     """Run the booking process once immediately."""
     logger.info("Running one-time booking...")
 
     try:
         config = Config.from_env()
+        config.debug = ctx.obj.get("debug", False)
         logger.info(f"Location: {config.location}")
         logger.info(f"Booking days: {', '.join(config.booking_days)}")
         logger.info(f"Weeks ahead: {config.weeks_ahead}")

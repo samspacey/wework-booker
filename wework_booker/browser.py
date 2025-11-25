@@ -1,5 +1,7 @@
 """Browser automation for WeWork."""
 
+from __future__ import annotations
+
 import logging
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
@@ -36,7 +38,10 @@ class WeWorkBrowser:
         self._browser = self._playwright.chromium.launch(
             headless=self.config.headless
         )
-        self._page = self._browser.new_page()
+        # Set a proper viewport size for the page
+        self._page = self._browser.new_page(
+            viewport={"width": 1280, "height": 800}
+        )
         logger.info("Browser started successfully")
 
     def close(self) -> None:
@@ -64,22 +69,90 @@ class WeWorkBrowser:
             True if login successful, False otherwise.
         """
         logger.info("Navigating to WeWork login page...")
-        self.page.goto(WEWORK_LOGIN_URL)
+        self.page.goto(WEWORK_LOGIN_URL, timeout=60000)
 
-        # Wait for the page to load
-        self.page.wait_for_load_state("networkidle")
+        # Wait for the page to fully load - WeWork is a JS-heavy SPA
+        self.page.wait_for_load_state("load")
 
         try:
-            # WeWork uses various SSO providers, the exact flow may vary
-            # This handles the common email/password flow
+            # Log current URL and page state for debugging
+            logger.debug(f"Current URL: {self.page.url}")
+
+            # WeWork Angular app takes time to initialize - wait for main content
+            logger.info("Waiting for page content to load...")
+
+            # Sometimes the page needs user interaction to proceed
+            # Try pressing Enter/clicking to dismiss any blocking elements
+            self.page.wait_for_timeout(2000)
+            try:
+                self.page.keyboard.press("Enter")
+                self.page.wait_for_timeout(1000)
+                self.page.keyboard.press("Escape")
+                self.page.wait_for_timeout(1000)
+                # Click on the page body to ensure focus
+                self.page.click("body", force=True)
+            except Exception:
+                pass
+
+            try:
+                # Wait for the splash/loading screen to disappear
+                self.page.wait_for_selector(
+                    '.splash-screen, #splash-logo, .loader',
+                    state="hidden",
+                    timeout=30000
+                )
+            except Exception:
+                pass  # Splash screen may not exist
+
+            # WeWork has a landing page - wait for and click "Member log in" button
+            logger.info("Waiting for Member log in button...")
+            try:
+                member_login_btn = self.page.wait_for_selector(
+                    'button:has-text("Member log in")',
+                    timeout=30000,
+                    state="visible"
+                )
+                if member_login_btn:
+                    logger.info("Clicking Member log in button...")
+                    if self.config.debug:
+                        self.page.screenshot(path="debug_before_click.png")
+                    member_login_btn.click()
+                    self.page.wait_for_timeout(3000)  # Wait for login form to appear
+            except Exception as e:
+                logger.debug(f"Member log in button not found: {e}, may already be on login form")
+
+            # Take screenshot for debugging
+            if self.config.debug:
+                self.page.screenshot(path="debug_login_page.png")
+                logger.debug("Screenshot saved to debug_login_page.png")
 
             # Look for email input field
-            logger.info("Entering email...")
-            email_input = self.page.wait_for_selector(
-                'input[type="email"], input[name="email"], input[id="email"], '
-                'input[placeholder*="email" i], input[autocomplete="email"]',
-                timeout=10000
-            )
+            logger.info("Looking for email input field...")
+
+            email_input = None
+            selectors = [
+                'input[type="email"]', 'input[name="email"]', 'input[id="email"]',
+                'input[placeholder*="email" i]', 'input[autocomplete="email"]',
+                'input[name="username"]', 'input[id="username"]',
+                'input[type="text"]', 'input'
+            ]
+
+            for selector in selectors:
+                try:
+                    email_input = self.page.wait_for_selector(selector, timeout=5000)
+                    if email_input:
+                        logger.debug(f"Found input with selector: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if not email_input:
+                # Save page content for debugging
+                html_content = self.page.content()
+                with open("debug_page_content.html", "w") as f:
+                    f.write(html_content)
+                logger.debug("Page content saved to debug_page_content.html")
+                raise Exception("Could not find email input field")
             if email_input:
                 email_input.fill(self.config.email)
 
@@ -90,7 +163,7 @@ class WeWorkBrowser:
             )
             if continue_btn:
                 continue_btn.click()
-                self.page.wait_for_load_state("networkidle")
+                self.page.wait_for_timeout(2000)  # Wait for page transition
 
             # Look for password input field
             logger.info("Entering password...")
@@ -111,7 +184,7 @@ class WeWorkBrowser:
                 login_btn.click()
 
             # Wait for navigation after login
-            self.page.wait_for_load_state("networkidle")
+            self.page.wait_for_timeout(5000)  # Wait for login to process
 
             # Check if login was successful by looking for common post-login elements
             # or checking if we're no longer on the login page
@@ -134,8 +207,9 @@ class WeWorkBrowser:
         """
         logger.info("Navigating to desk booking page...")
         try:
-            self.page.goto(WEWORK_BOOKING_URL)
-            self.page.wait_for_load_state("networkidle")
+            self.page.goto(WEWORK_BOOKING_URL, timeout=60000)
+            self.page.wait_for_load_state("domcontentloaded")
+            self.page.wait_for_timeout(2000)  # Additional wait for dynamic content
             logger.info("On desk booking page")
             return True
         except Exception as e:
