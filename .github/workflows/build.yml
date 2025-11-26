@@ -1,0 +1,120 @@
+name: Build Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller>=6.0.0
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium
+
+      - name: Build Mac app
+        run: pyinstaller wework_booker_mac.spec --clean --noconfirm
+
+      - name: Copy Chromium to app bundle
+        run: |
+          CHROMIUM_PATH=$(python3 -c "
+          import glob
+          from pathlib import Path
+          mac_paths = sorted(glob.glob(str(Path.home() / 'Library/Caches/ms-playwright/chromium-*')), reverse=True)
+          paths = [p for p in mac_paths if 'headless_shell' not in p]
+          if paths: print(paths[0])
+          ")
+          echo "Chromium path: $CHROMIUM_PATH"
+          if [ -d "$CHROMIUM_PATH" ]; then
+            mkdir -p "dist/WeWork Booker.app/Contents/Resources/chromium"
+            cp -R "$CHROMIUM_PATH/chrome-mac/Chromium.app" "dist/WeWork Booker.app/Contents/Resources/chromium/" || \
+            cp -R "$CHROMIUM_PATH/chrome-mac-arm64/Chromium.app" "dist/WeWork Booker.app/Contents/Resources/chromium/"
+          fi
+
+      - name: Create DMG
+        run: |
+          # Create DMG contents
+          mkdir -p dist/dmg_contents
+          cp -R "dist/WeWork Booker.app" dist/dmg_contents/
+          ln -s /Applications dist/dmg_contents/Applications
+
+          # Create DMG
+          hdiutil create -srcfolder dist/dmg_contents -volname "WeWork Booker" \
+            -fs HFS+ -format UDZO -o "dist/WeWorkBooker_${GITHUB_REF_NAME}.dmg"
+
+      - name: Upload Mac DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeWorkBooker-macOS-${{ github.ref_name }}
+          path: dist/WeWorkBooker_*.dmg
+          compression-level: 0  # Already compressed
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller>=6.0.0
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium
+
+      - name: Build Windows exe
+        run: pyinstaller wework_booker_win.spec --clean --noconfirm
+
+      - name: Copy Chromium to dist
+        shell: pwsh
+        run: |
+          $chromePath = Get-ChildItem "$env:LOCALAPPDATA\ms-playwright\chromium-*" -Directory |
+            Where-Object { $_.Name -notlike '*headless_shell*' } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+
+          if ($chromePath) {
+            Write-Host "Chromium path: $($chromePath.FullName)"
+            $dest = "dist\WeWork Booker\chromium"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+            $chromeWin = Get-ChildItem -Path $chromePath.FullName -Directory -Filter "chrome-win*" | Select-Object -First 1
+            if ($chromeWin) {
+              Copy-Item -Recurse "$($chromeWin.FullName)\*" $dest
+              Write-Host "Chromium copied successfully"
+            }
+          }
+
+      - name: Create installer with Inno Setup
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
+        with:
+          path: installer/setup.iss
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeWorkBooker-Windows-${{ github.ref_name }}
+          path: dist/installer/*.exe
+          compression-level: 0  # Already compressed
