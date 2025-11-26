@@ -3,11 +3,42 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
+from pathlib import Path
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def get_bundled_browser_path() -> str | None:
+    """Get path to bundled Chromium browser if running as packaged app.
+
+    Returns:
+        Path to Chromium executable if bundled, None otherwise.
+    """
+    if not getattr(sys, 'frozen', False):
+        return None  # Not running as packaged app
+
+    if sys.platform == 'darwin':
+        # Mac .app bundle: look in Resources/chromium folder
+        bundle_dir = Path(sys.executable).parent.parent / 'Resources'
+        browser_path = bundle_dir / 'chromium' / 'Chromium.app' / 'Contents' / 'MacOS' / 'Chromium'
+    elif sys.platform == 'win32':
+        # Windows: look next to executable in chromium folder
+        bundle_dir = Path(sys.executable).parent
+        browser_path = bundle_dir / 'chromium' / 'chrome.exe'
+    else:
+        return None
+
+    if browser_path.exists():
+        logger.info(f"Found bundled Chromium at: {browser_path}")
+        return str(browser_path)
+
+    logger.debug(f"Bundled Chromium not found at: {browser_path}")
+    return None
 
 WEWORK_LOGIN_URL = "https://members.wework.com/workplaceone/content2/login"
 WEWORK_BOOKING_URL = "https://members.wework.com/workplaceone/content2/bookings/desks"
@@ -35,9 +66,14 @@ class WeWorkBrowser:
         """Initialize and start the browser."""
         logger.info("Starting browser...")
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(
-            headless=self.config.headless
-        )
+
+        # Check for bundled browser (when running as packaged app)
+        launch_options = {"headless": self.config.headless}
+        bundled_path = get_bundled_browser_path()
+        if bundled_path:
+            launch_options["executable_path"] = bundled_path
+
+        self._browser = self._playwright.chromium.launch(**launch_options)
         # Set a proper viewport size for the page
         self._page = self._browser.new_page(
             viewport={"width": 1280, "height": 800}

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wework-booker"
+version = "0.1.0"
+description = "Automated desk booking for WeWork using browser automation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.40.0",
+    "python-dotenv>=1.0.0",
+    "schedule>=1.2.0",
+    "click>=8.1.0",
+    "PyQt6>=6.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.0.0",
+    "pillow>=10.0.0",
+]
+
+[project.scripts]
+wework-booker = "main:cli"
+
+[project.gui-scripts]
+wework-booker-gui = "wework_booker.gui.app:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["wework_booker*"]
