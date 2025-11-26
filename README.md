@@ -66,6 +66,14 @@ WEEKS_AHEAD=2
 
 ## Usage
 
+### Graphical Interface
+
+Launch the GUI for an easy-to-use interface:
+
+```bash
+python main.py gui
+```
+
 ### Run a one-time booking
 
 Book desks for all configured days in the upcoming weeks:
@@ -186,7 +194,11 @@ wework-booker/
     ├── config.py          # Configuration management
     ├── browser.py         # Browser automation
     ├── booker.py          # Booking logic
-    └── scheduler.py       # Scheduling logic
+    ├── scheduler.py       # Scheduling logic
+    └── gui/               # Graphical user interface
+        ├── __init__.py
+        ├── app.py
+        └── booking_thread.py
 ```
 
 ## Notes

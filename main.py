@@ -146,5 +146,15 @@ def show_dates() -> None:
         sys.exit(1)
 
 
+@cli.command()
+def gui() -> None:
+    """Launch the graphical user interface."""
+    from wework_booker.gui import BookingApp
+    from wework_booker.gui.app import run
+
+    logger.info("Launching GUI...")
+    run()
+
+
 if __name__ == "__main__":
     cli()
