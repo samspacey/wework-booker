@@ -106,9 +106,11 @@ class WeWorkBrowser:
         """
         logger.info("Navigating to WeWork login page...")
         self.page.goto(WEWORK_LOGIN_URL, timeout=60000)
-
-        # Wait for the page to fully load - WeWork is a JS-heavy SPA
-        self.page.wait_for_load_state("load")
+        self.page.wait_for_load_state("domcontentloaded")
+        # Wait briefly then reload - this helps the SPA initialize properly
+        self.page.wait_for_timeout(2000)
+        self.page.reload()
+        self.page.wait_for_load_state("networkidle")
 
         try:
             # Log current URL and page state for debugging
@@ -117,15 +119,10 @@ class WeWorkBrowser:
             # WeWork Angular app takes time to initialize - wait for main content
             logger.info("Waiting for page content to load...")
 
-            # Sometimes the page needs user interaction to proceed
             # Try pressing Enter/clicking to dismiss any blocking elements
-            self.page.wait_for_timeout(2000)
             try:
                 self.page.keyboard.press("Enter")
-                self.page.wait_for_timeout(1000)
                 self.page.keyboard.press("Escape")
-                self.page.wait_for_timeout(1000)
-                # Click on the page body to ensure focus
                 self.page.click("body", force=True)
             except Exception:
                 pass
@@ -153,7 +150,11 @@ class WeWorkBrowser:
                     if self.config.debug:
                         self.page.screenshot(path="debug_before_click.png")
                     member_login_btn.click()
-                    self.page.wait_for_timeout(3000)  # Wait for login form to appear
+                    # Wait for login form to appear
+                    self.page.wait_for_selector(
+                        'input[type="email"], input[name="email"], input[type="text"]',
+                        timeout=5000, state="visible"
+                    )
             except Exception as e:
                 logger.debug(f"Member log in button not found: {e}, may already be on login form")
 
@@ -162,35 +163,17 @@ class WeWorkBrowser:
                 self.page.screenshot(path="debug_login_page.png")
                 logger.debug("Screenshot saved to debug_login_page.png")
 
-            # Look for email input field
+            # Look for email input field - use combined selector for speed
             logger.info("Looking for email input field...")
-
-            email_input = None
-            selectors = [
-                'input[type="email"]', 'input[name="email"]', 'input[id="email"]',
-                'input[placeholder*="email" i]', 'input[autocomplete="email"]',
-                'input[name="username"]', 'input[id="username"]',
-                'input[type="text"]', 'input'
-            ]
-
-            for selector in selectors:
-                try:
-                    email_input = self.page.wait_for_selector(selector, timeout=5000)
-                    if email_input:
-                        logger.debug(f"Found input with selector: {selector}")
-                        break
-                except Exception:
-                    continue
-
-            if not email_input:
-                # Save page content for debugging
-                html_content = self.page.content()
-                with open("debug_page_content.html", "w") as f:
-                    f.write(html_content)
-                logger.debug("Page content saved to debug_page_content.html")
-                raise Exception("Could not find email input field")
+            email_input = self.page.wait_for_selector(
+                'input[type="email"], input[name="email"], input[id="email"], '
+                'input[name="username"], input[id="username"], input[type="text"]',
+                timeout=10000, state="visible"
+            )
             if email_input:
                 email_input.fill(self.config.email)
+            else:
+                raise Exception("Could not find email input field")
 
             # Look for a continue/next button after email
             continue_btn = self.page.query_selector(
@@ -199,7 +182,8 @@ class WeWorkBrowser:
             )
             if continue_btn:
                 continue_btn.click()
-                self.page.wait_for_timeout(2000)  # Wait for page transition
+                # Wait for password field to appear after email submission
+                self.page.wait_for_selector('input[type="password"]', timeout=5000, state="visible")
 
             # Look for password input field
             logger.info("Entering password...")
@@ -219,11 +203,10 @@ class WeWorkBrowser:
             if login_btn:
                 login_btn.click()
 
-            # Wait for navigation after login
-            self.page.wait_for_timeout(5000)  # Wait for login to process
+            # Wait for navigation away from login page
+            self.page.wait_for_url(lambda url: "login" not in url.lower(), timeout=10000)
 
-            # Check if login was successful by looking for common post-login elements
-            # or checking if we're no longer on the login page
+            # Check if login was successful
             if "login" not in self.page.url.lower():
                 logger.info("Login successful!")
                 return True
@@ -245,7 +228,8 @@ class WeWorkBrowser:
         try:
             self.page.goto(WEWORK_BOOKING_URL, timeout=60000)
             self.page.wait_for_load_state("domcontentloaded")
-            self.page.wait_for_timeout(2000)  # Additional wait for dynamic content
+            # Wait for booking UI elements to load
+            self.page.wait_for_selector('.location-card, [data-testid="location"], .desk-booking, .booking', timeout=5000)
             logger.info("On desk booking page")
             return True
         except Exception as e:
