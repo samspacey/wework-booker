@@ -78,6 +78,14 @@ else
     echo "WARNING: Chromium path not found: $CHROMIUM_PATH"
 fi
 
+# Ad-hoc code sign the app (allows right-click → Open without "move to bin" error)
+echo "Ad-hoc signing the app bundle..."
+codesign --force --deep --sign - "dist/WeWork Booker.app"
+echo "App signed successfully"
+
+# Remove quarantine attribute for local testing
+xattr -cr "dist/WeWork Booker.app" 2>/dev/null || true
+
 echo ""
 echo "=== Build complete ==="
 echo "App bundle: dist/WeWork Booker.app"
@@ -87,6 +95,8 @@ echo "  open 'dist/WeWork Booker.app'"
 echo ""
 echo "To create a DMG:"
 echo "  ./scripts/create_dmg.sh"
+echo ""
+echo "Note: Users downloading the DMG should right-click → Open the first time"
 
 # Deactivate venv
 deactivate

@@ -46,6 +46,11 @@ jobs:
             cp -R "$CHROMIUM_PATH/chrome-mac-arm64/Chromium.app" "dist/WeWork Booker.app/Contents/Resources/chromium/"
           fi
 
+      - name: Ad-hoc sign app bundle
+        run: |
+          codesign --force --deep --sign - "dist/WeWork Booker.app"
+          echo "App signed with ad-hoc signature"
+
       - name: Create DMG
         run: |
           # Create DMG contents
