@@ -226,10 +226,20 @@ class WeWorkBrowser:
         """
         logger.info("Navigating to desk booking page...")
         try:
+            # Navigate to booking URL
             self.page.goto(WEWORK_BOOKING_URL, timeout=60000)
             self.page.wait_for_load_state("domcontentloaded")
-            # Wait for booking UI elements to load
-            self.page.wait_for_selector('.location-card, [data-testid="location"], .desk-booking, .booking', timeout=5000)
+            # Wait then reload - same pattern as login to help SPA initialize
+            self.page.wait_for_timeout(2000)
+            self.page.reload()
+            self.page.wait_for_load_state("networkidle")
+
+            # Wait for the booking page content to appear
+            logger.info("Waiting for booking page to load...")
+            self.page.wait_for_selector(
+                '.location-card, .card-title, [class*="booking"], [class*="desk"]',
+                timeout=15000
+            )
             logger.info("On desk booking page")
             return True
         except Exception as e:
